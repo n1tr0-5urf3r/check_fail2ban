@@ -6,7 +6,7 @@
 </p>
 <br>
 <h3 align="center">
-    <a href="https://github.com/n1tr0-5urf3r/icinga2-scripts/releases/">Download Latest
+    <a href="https://github.com/n1tr0-5urf3r/check_fail2ban/releases">Download Latest
     </a>・
     <a href="https://exchange.icinga.com/n1tr0-5urf3r">Other Projects</a>・<a href="https://www.paypal.com/donate/?hosted_button_id=KXMYX49C6MLLN">Donate</a></h3>
 
