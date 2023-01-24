@@ -1,19 +1,20 @@
 #!/bin/bash
-#################################################################
-# Written by Fabian Ihle, fabi@ihlecloud.de                     #
-# Created: 22.03.2020                                           #
-# github: https://github.com/n1tr0-5urf3r/icinga2-scripts       #
-#                                                               #
-# Displays information per jail                                 #
-# Performance data for total blocked IPs                        #
-# Shows which IP is banned until when                           # 
-# ------------------------------------------------------------- #
-# Changelog:                                                    #
-# 020820 Version 1.01 - adapted to new fail2ban-client version  #
-# 181121 Version 1.02 - use variables for binaries everywhere   #
-# 160922 Version 1.03 - Shell check conformity                  #
-# 130123 Version 1.04 - Some more output on erroneous permission#
-#################################################################
+#########################################################################
+# Written by Fabian Ihle, fabi@ihlecloud.de                             #
+# Created: 22.03.2020                                                   #
+# github: https://github.com/n1tr0-5urf3r/icinga2-scripts               #
+#                                                                       #
+# Displays information per jail                                         #
+# Performance data for total blocked IPs                                #
+# Shows which IP is banned until when                                   # 
+# --------------------------------------------------------------------- #
+# Changelog:                                                            #
+# 020820 Version 1.01 - adapted to new fail2ban-client version          #
+# 181121 Version 1.02 - use variables for binaries everywhere           #
+# 160922 Version 1.03 - Shell check conformity                          #
+# 130123 Version 1.04 - Some more output on erroneous permission        #
+# 240123 Version 1.05 - Fix output in jaillist (thanks to d-stevens)    #
+#########################################################################
 
 # Helper message
 print_help() {
@@ -97,7 +98,7 @@ done
 
 # Get List of Jails
 if [ ! "$MANUAL" = true ]; then
-        JAILLIST=$(${SUDO} "${FBIN}" status |grep "Jail list" | sed 's/`- Jail list://g' | sed 's/ //g')
+        JAILLIST=$(${SUDO} "${FBIN}" status |grep "Jail list" | sed 's/`- Jail list://g' | sed 's/\s//g')
 fi
 
 # check for running service
