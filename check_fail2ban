@@ -102,7 +102,7 @@ if [ ! "$MANUAL" = true ]; then
 fi
 
 # check for running service
-COLUMNS="" ps -aux | grep "${FBINSERVER}" | grep -v grep > /dev/null 2>&1
+ps -aux | grep "${FBINSERVER}" | grep -v grep > /dev/null 2>&1
 if [[ "$?" == "0" ]]; then
     echo "OK: fail2ban running"
 else
@@ -146,7 +146,7 @@ if [ -z "$WARN" ]; then
         WARN=10
 fi
 
-if [ $WARN -ge $CRIT ]; then
+if [ "$WARN" -ge "$CRIT" ]; then
         print_error "Error: CRIT must be greater than WARN"
 fi
 
