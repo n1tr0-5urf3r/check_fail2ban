@@ -113,21 +113,22 @@ fi
 # Parse jaillist
 IFS=',' read -ra JAILS <<< "$JAILLIST"
 for JAIL in "${JAILS[@]}"; do
+        mapfile STATUS < <($SUDO "$FBIN" status "$JAIL")
 
-        if $SUDO "$FBIN" status "$JAIL" | grep -q "does not exist"; then
+        if printf "%s" "${STATUS[@]}" | grep -q "does not exist" ; then
                 print_error "Jail \"$JAIL\" not found"
         fi
         if [ "$TIME" = true ]; then
                 # Time is currently not supported
                 #BANNED_IPS=$($SUDO "$FBIN" get $JAIL banip --with-time| sed 's/ .*= / banned till /g')
-                BANNED_IPS=$($SUDO "$FBIN" status "$JAIL" | grep "Banned IP list:" | sed 's/^.*Banned IP list://g')
+                BANNED_IPS=$(printf "%s" "${STATUS[@]}" | grep "Banned IP list:" | sed 's/^.*Banned IP list://g')
         else
-                BANNED_IPS=$($SUDO "$FBIN" status "$JAIL" | grep "Banned IP list:" | sed 's/^.*Banned IP list://g')
+                BANNED_IPS=$(printf "%s" "${STATUS[@]}" | grep "Banned IP list:" | sed 's/^.*Banned IP list://g')
         fi
 
         # Get Amount of bans
         BANS=0
-        BANS=$($SUDO "${FBIN}" status "$JAIL" | grep -o "Currently banned:.*" | sed 's/Currently banned://g')
+        BANS=$(printf "%s" "${STATUS[@]}" | grep -o "Currently banned:.*" | sed 's/Currently banned://g')
         TOTALBANS=$((TOTALBANS+BANS))
 
         # Get Bantime for jail
