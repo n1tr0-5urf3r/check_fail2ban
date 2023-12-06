@@ -2,7 +2,7 @@
 #########################################################################
 # Written by Fabian Ihle, fabi@ihlecloud.de                             #
 # Created: 22.03.2020                                                   #
-# github: https://github.com/n1tr0-5urf3r/icinga2-scripts               #
+# github: https://github.com/n1tr0-5urf3r/check_fail2ban                #
 #                                                                       #
 # Displays information per jail                                         #
 # Performance data for total blocked IPs                                #
@@ -14,6 +14,8 @@
 # 160922 Version 1.03 - Shell check conformity                          #
 # 130123 Version 1.04 - Some more output on erroneous permission        #
 # 240123 Version 1.05 - Fix output in jaillist (thanks to d-stevens)    #
+# 061223 Version 1.06 - Reduce number of sudo invocations               #
+#                                             (thanks to MarcSchmitzer) #
 #########################################################################
 
 # Helper message
