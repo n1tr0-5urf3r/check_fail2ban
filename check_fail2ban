@@ -16,20 +16,26 @@
 # 240123 Version 1.05 - Fix output in jaillist (thanks to d-stevens)    #
 # 061223 Version 1.06 - Reduce number of sudo invocations               #
 #                                             (thanks to MarcSchmitzer) #
+# 110925 Version 1.07 - Added new bans in past X minutes header          #
+#                     - Cleaned banned IP output formatting              #
 #########################################################################
 
-# Helper message
+#!/bin/bash
+
 print_help() {
     echo "
 Usage:
-    $0 -w <warn_total> -c <crit_total> -m <minutes> -r <warn_hits> -R <crit_hits> [-j <jaillist>]
+    $0 -w <warn_total> -c <crit_total> -m <minutes> -r <warn_hits> -R <crit_hits> [-j <jaillist>] [-q]
 
 Defaults:
-    warn_total=10
-    crit_total=20
+    warn_total=5000
+    crit_total=10000
     minutes=60
-    warn_hits=5
-    crit_hits=10
+    warn_hits=25
+    crit_hits=50
+
+Options:
+    -q    Quiet Nagios-style output
 
 Examples:
     $0 -m 10 -r 5 -R 10
@@ -42,18 +48,19 @@ print_error() {
     exit 3
 }
 
-# Locate binaries
 FBIN=$(command -v fail2ban-client)
 SUDO=$(command -v sudo)
+
 if [ -z "$FBIN" ]; then print_error "fail2ban-client not found"; fi
 if [ -z "$SUDO" ]; then print_error "sudo not found"; fi
 
 # Defaults
-WARN_TOTAL=10
-CRIT_TOTAL=20
+WARN_TOTAL=5000
+CRIT_TOTAL=10000
 TIME_WINDOW=60
-WARN_HITS=5
-CRIT_HITS=10
+WARN_HITS=25
+CRIT_HITS=50
+QUIET=false
 
 # Parse arguments
 while [[ -n "$1" ]]; do
@@ -64,15 +71,16 @@ while [[ -n "$1" ]]; do
         -r) WARN_HITS=$2; shift ;;
         -R) CRIT_HITS=$2; shift ;;
         -j) MANUAL=true; JAILLIST=$2; shift ;;
+        -q) QUIET=true ;;
         -h) print_help; exit 0 ;;
         *) print_help; print_error "Unknown argument: $1" ;;
     esac
     shift
 done
 
-# Get list of jails if not manually specified
+# Get jails if not manually specified
 if [ "$MANUAL" != true ]; then
-    raw_jails=$($SUDO "$FBIN" status | grep "Jail list" | sed 's/`- Jail list://g')
+    raw_jails=$($SUDO "$FBIN" status | grep "Jail list" | sed 's/.*Jail list://')
     JAILLIST=$(echo "$raw_jails" | tr -d '\t ' | sed 's/,$//')
 fi
 
@@ -84,11 +92,15 @@ fi
 
 TOTALBANS=0
 NEW_BANS=0
+OUTPUT_DETAILED=""
 
 IFS=',' read -ra JAILS <<< "$JAILLIST"
 for JAIL in "${JAILS[@]}"; do
-    # Remove leading/trailing whitespace
     JAIL=$(echo "$JAIL" | xargs)
+    if [ -z "$JAIL" ]; then
+        continue
+    fi
+
     if $SUDO "$FBIN" status "$JAIL" 2>/dev/null | grep -q "does not exist"; then
         print_error "Jail '$JAIL' not found"
     fi
@@ -98,29 +110,51 @@ for JAIL in "${JAILS[@]}"; do
     BANS=$(echo "$BANS_RAW" | tr -cd '0-9')
     TOTALBANS=$((TOTALBANS + BANS))
 
+    # Banned IPs
+    IPS=$($SUDO "$FBIN" status "$JAIL" | grep "Banned IP list" | sed 's/Banned IP list://;s/, /,/g;s/  /,/g')
+
     # New bans in TIME_WINDOW
-    NEW_RAW=$(zgrep "Ban" /var/log/fail2ban.log | awk -v jail="$JAIL" -v mins="$TIME_WINDOW" '
-    BEGIN {count=0}
-    {
-        split($1,d,"-"); split($2,t,":");
-        ts=mktime(d[1]" "d[2]" "d[3]" "t[1]" "t[2]" "t[3])
-        if ($0 ~ jail && (systime() - ts <= mins*60)) count++
-    }
-    END {print count}')
+    NEW_RAW=$(grep "Ban" /var/log/fail2ban.log 2>/dev/null | awk -v jail="$JAIL" -v mins="$TIME_WINDOW" '
+        BEGIN {count=0}
+        {
+            split($1,d,"-"); split($2,t,":");
+            ts=mktime(d[1]" "d[2]" "d[3]" "t[1]" "t[2]" "t[3])
+            if ($0 ~ jail && (systime() - ts <= mins*60)) count++
+        }
+        END {print count}')
     NEW=$(echo "$NEW_RAW" | tr -cd '0-9')
     NEW_BANS=$((NEW_BANS + NEW))
+
+    # Prepare detailed output
+    if [ "$QUIET" = false ]; then
+        IPS_CLEAN=$(echo "$IPS" | tr -s ',' ',' | sed 's/^,*//;s/,*$//')
+        OUTPUT_DETAILED+="=== Jail: $JAIL ===\n"
+        OUTPUT_DETAILED+="Ban Time: $($SUDO "$FBIN" get "$JAIL" bantime 2>/dev/null || echo N/A)\n"
+        OUTPUT_DETAILED+="Currently Banned: $BANS\n"
+        OUTPUT_DETAILED+="Banned IPs: $IPS_CLEAN\n\n"
+    fi
 done
 
-OUTPUT="fail2ban running | total_banned=${TOTALBANS};${WARN_TOTAL};${CRIT_TOTAL} new_bans_${TIME_WINDOW}min=${NEW_BANS};${WARN_HITS};${CRIT_HITS}"
+OUTPUT_LINE="fail2ban running | total_banned=${TOTALBANS};${WARN_TOTAL};${CRIT_TOTAL} new_bans_${TIME_WINDOW}min=${NEW_BANS};${WARN_HITS};${CRIT_HITS}"
 
 # Determine state
 if [ "$TOTALBANS" -ge "$CRIT_TOTAL" ] || [ "$NEW_BANS" -ge "$CRIT_HITS" ]; then
-    echo "CRITICAL: $OUTPUT"
-    exit 2
+    STATE="CRITICAL"
+    EXITCODE=2
 elif [ "$TOTALBANS" -ge "$WARN_TOTAL" ] || [ "$NEW_BANS" -ge "$WARN_HITS" ]; then
-    echo "WARNING: $OUTPUT"
-    exit 1
+    STATE="WARNING"
+    EXITCODE=1
 else
-    echo "OK: $OUTPUT"
-    exit 0
+    STATE="OK"
+    EXITCODE=0
 fi
+
+if [ "$QUIET" = true ]; then
+    echo "$STATE: $OUTPUT_LINE"
+else
+    echo "$STATE: fail2ban running"
+    echo -e "New bans in past $TIME_WINDOW minutes: $NEW_BANS\n"
+    echo -e "$OUTPUT_DETAILED"
+fi
+
+exit $EXITCODE
