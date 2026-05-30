@@ -42,6 +42,25 @@ print_error() {
         exit 3
 }
 
+is_number() {
+        case "$1" in
+                ''|*[!0-9]*)
+                        return 1
+                        ;;
+                *)
+                        return 0
+                        ;;
+        esac
+}
+
+format_banned_ips() {
+        awk '{ for (i=1; i<=NF; i++) print $i }'
+}
+
+format_banned_ips_with_time() {
+        awk 'NF { ip=$1; if ($0 ~ / = /) { sub(/^.* = /, ""); print ip " until " $0 } else { print } }'
+}
+
 # Get binaries
 FBIN=$(command -v fail2ban-client)
 FBINSERVER=$(command -v fail2ban-server)
@@ -98,10 +117,11 @@ if [ -z "$NAGIOSUSER" ]; then
 fi
 
 # Check $SUDO permissions
-VISUDO=$($SUDO -l -U ${NAGIOSUSER})
+VISUDO=$($SUDO -l -U "$NAGIOSUSER")
 if echo "$VISUDO" | grep -q "(root) NOPASSWD: ${FBIN} status$" &&
    echo "$VISUDO" | grep -q "(root) NOPASSWD: ${FBIN} status \*$" &&
-   echo "$VISUDO" | grep -q "(root) NOPASSWD: ${FBIN} get \* bantime$"; then
+   echo "$VISUDO" | grep -q "(root) NOPASSWD: ${FBIN} get \* bantime$" &&
+   { [ ! "$TIME" = true ] || echo "$VISUDO" | grep -q "(root) NOPASSWD: ${FBIN} get \* banip --with-time$"; }; then
                 :
 else
                 echo "Not all sudo permissions available! Please refer to documentation."
@@ -111,19 +131,20 @@ fi
 
 # Get List of Jails
 if [ ! "$MANUAL" = true ]; then
-        JAILLIST=$(${SUDO} "${FBIN}" status |grep "Jail list" | sed 's/`- Jail list://g' | sed 's/\s//g')
+        JAILLIST=$(${SUDO} "${FBIN}" status | grep "Jail list" | sed 's/`- Jail list://g' | sed 's/[[:space:]]//g')
 fi
 
 # check for running service
 ps -aux | grep "${FBINSERVER}" | grep -v grep > /dev/null 2>&1
 if [[ "$?" == "0" ]]; then
-    echo "OK: fail2ban running"
+    :
 else
     echo "CRIT: fail2ban NOT running"
     exit 2
 fi
 
 # Parse jaillist
+TOTALBANS=0
 IFS=',' read -ra JAILS <<< "$JAILLIST"
 for JAIL in "${JAILS[@]}"; do
         mapfile STATUS < <($SUDO "$FBIN" status "$JAIL")
@@ -132,23 +153,25 @@ for JAIL in "${JAILS[@]}"; do
                 print_error "Jail \"$JAIL\" not found"
         fi
         if [ "$TIME" = true ]; then
-                # Time is currently not supported
-                #BANNED_IPS=$($SUDO "$FBIN" get $JAIL banip --with-time| sed 's/ .*= / banned till /g')
-                BANNED_IPS=$(printf "%s" "${STATUS[@]}" | grep "Banned IP list:" | sed 's/^.*Banned IP list://g')
+                BANNED_IPS=$($SUDO "$FBIN" get "$JAIL" banip --with-time | format_banned_ips_with_time)
         else
-                BANNED_IPS=$(printf "%s" "${STATUS[@]}" | grep "Banned IP list:" | sed 's/^.*Banned IP list://g')
+                BANNED_IPS=$(printf "%s" "${STATUS[@]}" | grep "Banned IP list:" | sed 's/^.*Banned IP list:[[:space:]]*//g' | format_banned_ips)
+        fi
+
+        if [ -z "$BANNED_IPS" ]; then
+                BANNED_IPS="none"
         fi
 
         # Get Amount of bans
         BANS=0
-        BANS=$(printf "%s" "${STATUS[@]}" | grep -o "Currently banned:.*" | sed 's/Currently banned://g')
+        BANS=$(printf "%s" "${STATUS[@]}" | grep -o "Currently banned:.*" | sed 's/Currently banned:[[:space:]]*//g')
         TOTALBANS=$((TOTALBANS+BANS))
 
         # Get Bantime for jail
         BANTIME=$($SUDO "$FBIN" get "$JAIL" bantime)
 
         # Assemble Output
-        OUTPUT="$OUTPUT\\nJail: $JAIL\\nBan Time: $BANTIME\\nCurrently Banned: $BANS\\nBanned IPs: $BANNED_IPS\\n"
+        OUTPUT="$OUTPUT\\n\\nJail: $JAIL\\nBan time: $BANTIME\\nCurrently banned: $BANS\\nBanned IPs:\\n$BANNED_IPS"
 done
 
 # Set default values
@@ -160,21 +183,30 @@ if [ -z "$WARN" ]; then
         WARN=10
 fi
 
+if ! is_number "$WARN"; then
+        print_error "WARN must be a number"
+fi
+
+if ! is_number "$CRIT"; then
+        print_error "CRIT must be a number"
+fi
+
 if [ "$WARN" -ge "$CRIT" ]; then
         print_error "Error: CRIT must be greater than WARN"
 fi
 
 # Append additional info
-OUTPUT=$(echo -e "$OUTPUT\\nTotal banned: $TOTALBANS IPs|banned_IP=${TOTALBANS};${WARN};${CRIT}")
+OUTPUT=$(echo -e "$OUTPUT")
+SUMMARY="Total banned: $TOTALBANS IPs|banned_IP=${TOTALBANS};${WARN};${CRIT}"
 
 # States
-if [ "$TOTALBANS" -ge ${WARN} ] && [ "$TOTALBANS" -lt ${CRIT} ]; then
-        echo "WARNING:$OUTPUT"
+if [ "$TOTALBANS" -ge "$WARN" ] && [ "$TOTALBANS" -lt "$CRIT" ]; then
+        echo "WARNING: $SUMMARY$OUTPUT"
         exit 1
-elif [ "$TOTALBANS" -ge ${CRIT} ];then
-        echo "CRITICAL:$OUTPUT"
+elif [ "$TOTALBANS" -ge "$CRIT" ];then
+        echo "CRITICAL: $SUMMARY$OUTPUT"
         exit 2
 else
-        echo "$OUTPUT"
+        echo "OK: $SUMMARY$OUTPUT"
         exit 0
 fi

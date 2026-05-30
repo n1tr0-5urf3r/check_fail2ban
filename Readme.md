@@ -20,6 +20,7 @@ This plugin requires `fail2ban` and `sudo` installed. Also several commands must
         nagios  ALL=NOPASSWD: /usr/bin/fail2ban-client status
         nagios  ALL=NOPASSWD: /usr/bin/fail2ban-client status *
         nagios  ALL=NOPASSWD: /usr/bin/fail2ban-client get * bantime
+        nagios  ALL=NOPASSWD: /usr/bin/fail2ban-client get * banip --with-time
 ### Usage    
             ./check_fail2ban -h Display this message
                              -w <warning level> defaults to 10
