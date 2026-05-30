@@ -17,6 +17,8 @@
 # 061223 Version 1.06 - Reduce number of sudo invocations               #
 #                                             (thanks to MarcSchmitzer) #
 # 190526 Version 1.07 - Ability to set nagios user                      #
+#                                             (thanks to roberthawdown) #
+# 300526 Version 1.08 - Re-enable -t flag                               #
 #########################################################################
 
 # Helper message
