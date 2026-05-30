@@ -40,7 +40,7 @@ print_help() {
 }
 
 print_error() {
-        echo -e "Error: $1\\n"
+        printf 'Error: %s\n\n' "$1"
         exit 3
 }
 
@@ -63,6 +63,23 @@ format_banned_ips_with_time() {
         awk 'NF { ip=$1; if ($0 ~ / = /) { sub(/^.* = /, ""); print ip " until " $0 } else { print } }'
 }
 
+require_value() {
+        if [ -z "$2" ] || [ "${2#-}" != "$2" ]; then
+                print_help
+                print_error "Missing value for $1"
+        fi
+}
+
+can_sudo() {
+        if [ "$(id -un)" = "$NAGIOSUSER" ]; then
+                $SUDO -n -l "$@" > /dev/null 2>&1
+        elif [ "$(id -u)" = "0" ]; then
+                $SUDO -n -l -U "$NAGIOSUSER" "$@" > /dev/null 2>&1
+        else
+                print_error "Cannot check sudo permissions for \"$NAGIOSUSER\" while running as \"$(id -un)\""
+        fi
+}
+
 # Get binaries
 FBIN=$(command -v fail2ban-client)
 FBINSERVER=$(command -v fail2ban-server)
@@ -82,6 +99,7 @@ fi
 while test -n "$1"; do
     case "$1" in
         -c)
+            require_value "$1" "$2"
             CRIT=$2
             shift
             ;;
@@ -90,6 +108,7 @@ while test -n "$1"; do
             exit 3
             ;;
         -w)
+            require_value "$1" "$2"
             WARN=$2
             shift
             ;;
@@ -97,11 +116,13 @@ while test -n "$1"; do
             TIME=true
             ;;
         -j)
+            require_value "$1" "$2"
             MANUAL=true
             JAILLIST=$2
             shift
             ;;
         -u)
+            require_value "$1" "$2"
             NAGIOSUSER=$2
             shift
             ;;
@@ -119,11 +140,10 @@ if [ -z "$NAGIOSUSER" ]; then
 fi
 
 # Check $SUDO permissions
-VISUDO=$($SUDO -l -U "$NAGIOSUSER")
-if echo "$VISUDO" | grep -q "(root) NOPASSWD: ${FBIN} status$" &&
-   echo "$VISUDO" | grep -q "(root) NOPASSWD: ${FBIN} status \*$" &&
-   echo "$VISUDO" | grep -q "(root) NOPASSWD: ${FBIN} get \* bantime$" &&
-   { [ ! "$TIME" = true ] || echo "$VISUDO" | grep -q "(root) NOPASSWD: ${FBIN} get \* banip --with-time$"; }; then
+if can_sudo "$FBIN" status &&
+   can_sudo "$FBIN" status "*" &&
+   can_sudo "$FBIN" get "*" bantime &&
+   { [ ! "$TIME" = true ] || can_sudo "$FBIN" get "*" banip --with-time; }; then
                 :
 else
                 echo "Not all sudo permissions available! Please refer to documentation."
@@ -137,8 +157,7 @@ if [ ! "$MANUAL" = true ]; then
 fi
 
 # check for running service
-ps -aux | grep "${FBINSERVER}" | grep -v grep > /dev/null 2>&1
-if [[ "$?" == "0" ]]; then
+if ps -aux | grep "${FBINSERVER}" | grep -v grep > /dev/null 2>&1; then
     :
 else
     echo "CRIT: fail2ban NOT running"
@@ -198,17 +217,17 @@ if [ "$WARN" -ge "$CRIT" ]; then
 fi
 
 # Append additional info
-OUTPUT=$(echo -e "$OUTPUT")
+OUTPUT=$(printf '%b' "$OUTPUT")
 SUMMARY="Total banned: $TOTALBANS IPs|banned_IP=${TOTALBANS};${WARN};${CRIT}"
 
 # States
 if [ "$TOTALBANS" -ge "$WARN" ] && [ "$TOTALBANS" -lt "$CRIT" ]; then
-        echo "WARNING: $SUMMARY$OUTPUT"
+        printf 'WARNING: %s%s\n' "$SUMMARY" "$OUTPUT"
         exit 1
 elif [ "$TOTALBANS" -ge "$CRIT" ];then
-        echo "CRITICAL: $SUMMARY$OUTPUT"
+        printf 'CRITICAL: %s%s\n' "$SUMMARY" "$OUTPUT"
         exit 2
 else
-        echo "OK: $SUMMARY$OUTPUT"
+        printf 'OK: %s%s\n' "$SUMMARY" "$OUTPUT"
         exit 0
 fi
