@@ -19,6 +19,7 @@
 # 190526 Version 1.07 - Ability to set nagios user                      #
 #                                             (thanks to roberthawdown) #
 # 300526 Version 1.08 - Re-enable -t flag                               #
+# 010626 Version 1.09 - Add quiet output option                         #
 #########################################################################
 
 # Helper message
@@ -33,6 +34,7 @@ print_help() {
                                          -j <jaillist> i.e. comma separated string of jails, i.e. ssh,postfix
                                             Only check those jails
                                          -u <username> defaults to nagios
+                                         -q, --quiet Do not display individual banned IPs
                 Examples:
                         ./check_fail2ban -t -w 5 -c 10 -j ssh,postfix
                         ./check_fail2ban -t
@@ -115,6 +117,9 @@ while test -n "$1"; do
         -t)
             TIME=true
             ;;
+        -q|--quiet)
+            QUIET=true
+            ;;
         -j)
             require_value "$1" "$2"
             MANUAL=true
@@ -143,7 +148,7 @@ fi
 if can_sudo "$FBIN" status &&
    can_sudo "$FBIN" status "*" &&
    can_sudo "$FBIN" get "*" bantime &&
-   { [ ! "$TIME" = true ] || can_sudo "$FBIN" get "*" banip --with-time; }; then
+   { [ "$QUIET" = true ] || [ ! "$TIME" = true ] || can_sudo "$FBIN" get "*" banip --with-time; }; then
                 :
 else
                 echo "Not all sudo permissions available! Please refer to documentation."
@@ -173,7 +178,9 @@ for JAIL in "${JAILS[@]}"; do
         if printf "%s" "${STATUS[@]}" | grep -q "does not exist" ; then
                 print_error "Jail \"$JAIL\" not found"
         fi
-        if [ "$TIME" = true ]; then
+        if [ "$QUIET" = true ]; then
+                BANNED_IPS=""
+        elif [ "$TIME" = true ]; then
                 BANNED_IPS=$($SUDO "$FBIN" get "$JAIL" banip --with-time | format_banned_ips_with_time)
         else
                 BANNED_IPS=$(printf "%s" "${STATUS[@]}" | grep "Banned IP list:" | sed 's/^.*Banned IP list:[[:space:]]*//g' | format_banned_ips)
@@ -192,7 +199,11 @@ for JAIL in "${JAILS[@]}"; do
         BANTIME=$($SUDO "$FBIN" get "$JAIL" bantime)
 
         # Assemble Output
-        OUTPUT="$OUTPUT\\n\\nJail: $JAIL\\nBan time: $BANTIME\\nCurrently banned: $BANS\\nBanned IPs:\\n$BANNED_IPS"
+        if [ "$QUIET" = true ]; then
+                OUTPUT="$OUTPUT\\n\\nJail: $JAIL\\nBan time: $BANTIME\\nBanned IPs: $BANS"
+        else
+                OUTPUT="$OUTPUT\\n\\nJail: $JAIL\\nBan time: $BANTIME\\nCurrently banned: $BANS\\nBanned IPs:\\n$BANNED_IPS"
+        fi
 done
 
 # Set default values
