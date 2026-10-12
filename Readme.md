@@ -19,8 +19,9 @@ This plugin requires `fail2ban` and `sudo` installed. Also several commands must
         # Needed for check_fail2ban
         nagios  ALL=NOPASSWD: /usr/bin/fail2ban-client status
         nagios  ALL=NOPASSWD: /usr/bin/fail2ban-client status *
-        nagios  ALL=NOPASSWD: /usr/bin/fail2ban-client get * bantime
-        nagios  ALL=NOPASSWD: /usr/bin/fail2ban-client get * banip --with-time
+        nagios  ALL=NOPASSWD: /usr/bin/fail2ban-client get *
+
+`sudo-rs` (the default `sudo` since Ubuntu 25.10) only allows `*` as the final argument, so rules like `get * bantime` are rejected with `wildcards are not allowed in command arguments`. The rules above work with both `sudo-rs` and classic `sudo`.
 ### Usage    
             ./check_fail2ban -h Display this message
                              -w <warning level> defaults to 10

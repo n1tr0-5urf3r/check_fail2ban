@@ -20,6 +20,7 @@
 #                                             (thanks to roberthawdown) #
 # 300526 Version 1.08 - Re-enable -t flag                               #
 # 010626 Version 1.09 - Add quiet output option                         #
+# 121026 Version 1.10 - Support sudo-rs (no mid-argument wildcards)     #
 #########################################################################
 
 # Helper message
@@ -152,6 +153,7 @@ if can_sudo "$FBIN" status &&
                 :
 else
                 echo "Not all sudo permissions available! Please refer to documentation."
+                echo "Note: sudo-rs (default since Ubuntu 25.10) rejects rules like 'fail2ban-client get * bantime', use 'fail2ban-client get *' instead."
                 echo "If you have set them up, make sure that the command 'sudo -u ${NAGIOSUSER} /usr/lib/nagios/plugins/check_fail2ban -t -w 1 -c 2' correctly displays your jails."
                 print_error "If they do not show up, try repairing sudo permissions with the command 'chown root:root /usr/bin/sudo && chmod 4755 /usr/bin/sudo'"
 fi
