@@ -20,6 +20,7 @@
 #                                             (thanks to roberthawdown) #
 # 300526 Version 1.08 - Re-enable -t flag                               #
 # 010626 Version 1.09 - Add quiet output option                         #
+# 121026 Version 1.10 - Support sudo-rs (no mid-argument wildcards)     #
 #########################################################################
 
 # Helper message
